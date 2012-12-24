@@ -1,0 +1,274 @@
+<!-- 
+More info on API on: 
+  http://servicios.elpais.com/sorteos/loteria-navidad/api/
+  http://www.elpais.com/sorteo/loteria-del-nino/api/
+
+WORKAROUND: To avoid CORS until fix run with chromium --disable-web-security
+
+TODO:
+  - Deal with CORS
+  - Simplify Status only one for the whole page. 
+  - Show Error just when really fails.
+  - Don't do queries until open (check status)
+-->
+
+<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Strict//EN' 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd'>
+<html xmlns='http://www.w3.org/1999/xhtml'>
+<head>
+	<meta http-equiv='Content-Type' content='text/html; charset=iso-8859-1' />
+<!--	<link type="text/css" href="style.css" rel="stylesheet"> -->
+	<title>lotto</title>
+	
+	<style>
+	body {
+	font-family: DejaVu Sans Mono,courier, monospace;
+	background-color: #000;
+	color: #fff;
+	font-size:14px;
+}
+a {
+	color: #0f0;
+	text-decoration: none; 
+}
+input {
+	border: 0;
+	border-bottom: solid 1px #fff;
+	background-color: #000;
+	color: #fff;
+}
+button {
+	border: solid 1px #fff;
+	background-color: #000;
+	color: #fff;
+	font-weight:bold;
+}
+th {
+	white-space: pre;
+	background-color: #fff;
+	color: #000;
+}
+td {
+	text-align : right;
+	white-space: pre;
+}
+
+td.red9 { color: #ff0000; }
+td.red8 { color: #ff1c1c; }
+td.red7 { color: #ff3838; }
+td.red6 { color: #ff5555; }
+td.red5 { color: #ff7171; }
+td.red4 { color: #ff8d8d; }
+td.red3 { color: #ffaaaa; }
+td.red2 { color: #ffc6c6; }
+td.red1 { color: #ffe2e2; }
+td.red0 { color: #ffffff; }
+
+td.leftred9 { color: #ff0000; text-align : left;}
+td.leftred8 { color: #ff1c1c; text-align : left;}
+td.leftred7 { color: #ff3838; text-align : left;}
+td.leftred6 { color: #ff5555; text-align : left;}
+td.leftred5 { color: #ff7171; text-align : left;}
+td.leftred4 { color: #ff8d8d; text-align : left;}
+td.leftred3 { color: #ffaaaa; text-align : left;}
+td.leftred2 { color: #ffc6c6; text-align : left;}
+td.leftred1 { color: #ffe2e2; text-align : left;}
+td.leftred0 { color: #ffffff; text-align : left;}
+
+td.blue { color: #5c5cff; }
+td.grey { color: #7f7f7f; }
+td.yellow { color: #ffff00; }
+td.pink { color: #ff00ff; }
+td.red { color: #ff0000; }
+td.green { color: #00ff00; }
+
+td.leftblue { color: #5c5cff; text-align : left;}
+td.leftgrey { color: #7f7f7f; text-align : left; }
+td.leftyellow { color: #ffff00; text-align : left; }
+td.leftpink { color: #ff00ff; text-align : left; }
+td.leftred { color: #ff0000; text-align : left;}
+td.leftgreen { color: #00ff00; text-align : left;}
+
+td.centerblue { color: #5c5cff; text-align : center;}
+td.centergrey { color: #7f7f7f; text-align : center; }
+td.centeryellow { color: #ffff00; text-align : center; }
+td.centerpink { color: #ff00ff; text-align : center; }
+td.centerred { color: #ff0000; text-align : center; }
+td.centergreen { color: #00ff00; text-align : center; }
+
+td.left {
+	text-align : left;
+}
+td.center {
+	text-align : center;
+}
+
+span.blue { color: #5c5cff; }
+span.grey { color: #7f7f7f; }
+span.yellow { color: #ffff00; }
+span.pink { color: #ff00ff; }
+span.red { color: #ff0000; }
+span.green { color: #00ff00; }
+
+span.boldblue { color: #5c5cff; font-weight:bold;}
+span.boldgrey { color: #7f7f7f; font-weight:bold;}
+span.boldyellow { color: #ffff00; font-weight:bold;}
+span.boldpink { color: #ff00ff; font-weight:bold;}
+span.boldred { color: #ff0000; }
+span.boldgreen { color: #00ff00; }
+
+.bold {
+	font-weight:bold;
+}
+#a {
+	color: #0f0;
+}
+#c {
+	color: #0bc;
+}
+#b {
+	color: #ff0096;
+}
+
+	</style>
+</head>
+<body onload="javascript:lotto_init()">
+	<span id="date"></span> 
+	<br/>
+	<input size="16" id="extraNumber" /> <span id="delta"></span>
+	<button name="submit" onclick="javascript:lotto_add_btn(document.getElementById('extraNumber').value)" >add</button>
+	<button name="clear" onclick="javascript:lotto_clean()" >clean</button>
+	<button name="inital" onclick="javascript:numbers.forEach(lotto_request)" >inital</button>
+	
+	
+	<br/>
+	
+	<table id="lotto" width="70%" align="center">
+		<thead>
+			<th>Numero</th>
+			<th>Premio</th>
+			<th>Hour</th>
+			<th>Status</th>
+			<th>Error</th>
+		</thead>
+ 		<tbody id="lottobody" align="center">
+		</tbody>
+	</table>
+
+ <script src="./QueryData.js" type="text/javascript" charset="utf-8"></script>
+
+<script type='text/javascript'>
+numbers = [ '99999', '99998', '99997', '99996', '9999' , '9998' , '9997' ]
+
+function tm(unix_tm) {
+ 	var dt = new Date(unix_tm*1000);
+ 	var date = dt.getHours() + ':' + dt.getMinutes() + ':' + dt.getSeconds();
+ 	return date;
+}
+
+function lotto_clean()
+{
+	var tbody = document.getElementById('lottobody');
+	while (tbody.childNodes.length > 0) {
+		tbody.removeChild(tbody.firstChild);
+	}
+}
+
+function lotto_add(lotto)
+{
+	var cell;
+	var tbody = document.getElementById('lottobody');
+
+	var row = document.createElement('tr');
+
+	cell = document.createElement('td');
+	cell.appendChild(document.createTextNode(lotto.numero));
+	row.appendChild(cell);
+
+	cell = document.createElement('td');
+	cell.appendChild(document.createTextNode(lotto.premio));
+	row.appendChild(cell);
+	
+  cell = document.createElement('td');
+//	cell.appendChild(document.createTextNode(lotto.timestamp.toLocaleTimeString()));
+  cell.appendChild(document.createTextNode(tm(lotto.timestamp)));
+	row.appendChild(cell);
+	
+	cell = document.createElement('td');
+	cell.appendChild(document.createTextNode(lotto.status));
+	row.appendChild(cell);
+	
+	cell = document.createElement('td');
+	cell.appendChild(document.createTextNode(lotto.error));
+	row.appendChild(cell);	
+
+	tbody.appendChild(row);
+}
+
+function lotto_upd(id, child, css)
+{
+	var elem = document.getElementById(id);
+	while (elem.childNodes.length > 0) {
+		elem.removeChild(elem.firstChild);
+	}
+	if (child != null)      
+		elem.appendChild(child);
+	if (css != null)
+		elem.className = css;
+}
+
+function lotto_update(numbers)
+{
+	lotto_clean();
+	numbers.forEach(lotto_request)
+}
+
+function lotto_request(number)
+{
+	var http_request = new XMLHttpRequest();
+	http_request.open('GET', 'http://api.elpais.com/ws/LoteriaNavidadPremiados?n='+number, true);
+	http_request.onreadystatechange = function () {
+	if ( http_request.readyState == 4 && http_request.status == 200 ) {
+		var json = eval(http_request.responseText);
+//		var json = JSON.parse( '{' + http_request.responseText + '}' );
+	lotto_add(json);
+	console.log(json);
+        }
+	};
+	http_request.send(null);
+}
+
+function lotto_qs()
+{
+	var getData = new QueryData(location.search, true);
+	
+	if (typeof getData.n !== "undefined") {
+		for (var index = 0; index < getData.n.length; index ++){
+			console.log("Number: "+getData.n[index]);
+			numbers.push(getData.n[index]);
+		}
+	}
+}
+
+function lotto_add_btn (number) {
+	var url = window.location.href
+	var url_split = url.split("?");
+	console.log("url_split: "+url_split);
+	console.log("url_split size: "+url_split.length);
+    if (url_split.length < 2) {
+		console.log("URL: "+ window.location.href+"?n="+number);
+		window.location.href = window.location.href+"?n="+number;
+	} else {
+		console.log("URL: "+ window.location.href+"&n="+number);
+		window.location.href = window.location.href+"&n="+number;
+	}
+}
+
+function lotto_init () {
+	lotto_qs();
+	lotto_update(numbers);
+	window.setInterval("lotto_update(numbers)",300000);
+}
+		</script>
+	</body>
+</html>
+
